@@ -435,7 +435,8 @@ assert_all_equal(actual, t.tensor([0, 5, 10, 15, 20]))
 #%%
 
 def batched_logsumexp(matrix: t.Tensor) -> t.Tensor:
-    """For each row of the matrix, compute log(sum(exp(row))) in a numerically stable way.
+    """For each row of the matrix, compute log(sum(exp(row))) in a 
+    numerically stable way.
 
     matrix: shape (batch, n)
 
@@ -447,9 +448,19 @@ def batched_logsumexp(matrix: t.Tensor) -> t.Tensor:
     - https://leimao.github.io/blog/LogSumExp/
     - https://gregorygundersen.com/blog/2020/02/09/log-sum-exp/
     """
-    pass
 
+    a = reduce(matrix, 'h w -> h','max')
+    am = repeat(a, '... -> ... k', k = matrix.shape[1])
+    diff = matrix - am
+    exp = diff.apply_(lambda y: math.exp(y))
+    summ = reduce(exp, 'h w -> h', 'sum')
+    summ_float = summ.float()
+    log = summ_float.apply_(lambda y: math.log(y))
+    result = a.float() + log
+    return result
+    
 
+#%%
 matrix = t.tensor([[-1000, -1000, -1000, -1000], [1000, 1000, 1000, 1000]])
 expected = t.tensor([-1000 + math.log(4), 1000 + math.log(4)])
 actual = batched_logsumexp(matrix)
@@ -459,7 +470,7 @@ expected2 = t.logsumexp(matrix2, dim=-1)
 actual2 = batched_logsumexp(matrix2)
 assert_all_close(actual2, expected2)
 
-
+#%%
 def batched_softmax(matrix: t.Tensor) -> t.Tensor:
     """For each row of the matrix, compute softmax(row).
 
@@ -470,15 +481,43 @@ def batched_softmax(matrix: t.Tensor) -> t.Tensor:
 
     Return: (batch, n). For each i, out[i] should sum to 1.
     """
-    pass
+ 
+    exp = matrix.apply_(lambda y: math.exp(y))
+    denom = reduce(exp, 'h w -> h', 'sum')
+    denom_rep = repeat(denom, 'h -> h w', w = matrix.shape[1])
+    return exp/denom_rep
 
+#%%
+matrix = t.arange(1, 6).view((1, 5)).float().log()
+matrix_e = matrix + 0.12
+exp = matrix_e.apply_(lambda y: math.exp(y))
+
+exp.dtype
+#%%
+denom = reduce(exp, 'h w -> h', 'sum')
+denom.dtype
+#%%
+denom_rep = repeat(denom, 'h -> h w', w = matrix_e.shape[1])
+denom_rep.dtype
+#%%
+res = exp/denom
+res.dtype
+#%%
+t.softmax(matrix_e, dim = 1)
+
+#%%
 
 matrix = t.arange(1, 6).view((1, 5)).float().log()
 expected = t.arange(1, 6).view((1, 5)) / 15.0
 actual = batched_softmax(matrix)
+
+#%%
+
 assert_all_close(actual, expected)
 for i in [0.12, 3.4, -5, 6.7]:
     assert_all_close(actual, batched_softmax(matrix + i))
+
+#%% 
 matrix2 = t.rand((10, 20))
 actual2 = batched_softmax(matrix2)
 assert actual2.min() >= 0.0
@@ -486,7 +525,7 @@ assert actual2.max() <= 1.0
 assert_all_equal(actual2.argsort(), matrix2.argsort())
 assert_all_close(actual2.sum(dim=-1), t.ones(matrix2.shape[:-1]))
 
-
+#%%
 def batched_logsoftmax(matrix: t.Tensor) -> t.Tensor:
     """Compute log(softmax(row)) for each row of the matrix.
 
@@ -495,11 +534,15 @@ def batched_logsoftmax(matrix: t.Tensor) -> t.Tensor:
     Return: (batch, n). For each i, out[i] should sum to 1.
 
     Do this without using PyTorch's logsoftmax function.
-    For each row, subtract the maximum first to avoid overflow if the row contains large values.
+    For each row, subtract the maximum first to avoid 
+    overflow if the row contains large values.
     """
-    pass
+    matrix = t.arange(1, 6).view((1, 5)).float()
+    matrix_small = matrix - reduce(matrix, 'h w -> h', 'max')
+    logsoftmax = batched_softmax(matrix_small).apply_(lambda y: math.log(y))
+    return logsoftmax
 
-
+#%%
 matrix = t.arange(1, 6).view((1, 5)).float()
 start = 1000
 matrix2 = t.arange(start + 1, start + 6).view((1, 5)).float()
@@ -507,22 +550,36 @@ actual = batched_logsoftmax(matrix2)
 expected = t.tensor([[-4.4519, -3.4519, -2.4519, -1.4519, -0.4519]])
 assert_all_close(actual, expected)
 
-
+#%%
 def batched_cross_entropy_loss(logits: t.Tensor, true_labels: t.Tensor) -> t.Tensor:
     """Compute the cross entropy loss for each example in the batch.
 
-    logits: shape (batch, classes). logits[i][j] is the unnormalized prediction for example i and class j.
-    true_labels: shape (batch, ). true_labels[i] is an integer index representing the true class for example i.
+    logits: shape (batch, classes). logits[i][j] is the unnormalized
+      prediction for example i and class j.
+    true_labels: shape (batch, ). true_labels[i] is an integer index 
+    representing the true class for example i.
 
     Return: shape (batch, ). out[i] is the loss for example i.
 
-    Hint: convert the logits to log-probabilities using your batched_logsoftmax from above.
-    Then the loss for an example is just the negative of the log-probability that the model assigned to the true class. Use torch.gather to perform the indexing.
+    Hint: convert the logits to log-probabilities using your batched_logsoftmax
+      from above.
+    Then the loss for an example is just the negative of the log-probability that
+      the model assigned to the true class. Use torch.gather to perform the indexing.
     """
     pass
 
+#%%
+logits = t.tensor([[float("-inf"), float("-inf"), 0], [1 / 3, 1 / 3, 1 / 3], [float("-inf"), 0, 0]])
+true_labels = t.tensor([2, 0, 0])
+logprob = batched_logsoftmax(logits)
+
+
+#%%
+
 
 logits = t.tensor([[float("-inf"), float("-inf"), 0], [1 / 3, 1 / 3, 1 / 3], [float("-inf"), 0, 0]])
+logits
+#%%
 true_labels = t.tensor([2, 0, 0])
 expected = t.tensor([0.0, math.log(3), float("inf")])
 actual = batched_cross_entropy_loss(logits, true_labels)

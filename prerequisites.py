@@ -187,19 +187,10 @@ def batched_dot_product_nd(a: t.Tensor, b: t.Tensor) -> t.Tensor:
     """
     assert a.shape == b.shape
 
+    dot_prod = t.einsum('j..., j...-> j', a,b)
 
-    pass
-
-#%%
-a = t.tensor([0, 0, 1])
-b = t.tensor([1, 1, 0])
-
-dot_prod = t.einsum('a, b ->', a,b)
-dot_prod   
-
-#dot_p = t.einsum('i,j ->', a,b)
-
-
+    return dot_prod
+    
 
 #%%
 
@@ -212,9 +203,6 @@ assert_all_equal(actual2, expected2)
 
 #%%
 
-#%%
-
-
 def identity_matrix(n: int) -> t.Tensor:
     """Return the identity matrix of size nxn.
 
@@ -224,17 +212,30 @@ def identity_matrix(n: int) -> t.Tensor:
     Bonus: find a different way to do it.
     """
     assert n >= 0
-    pass
-# %%
-ls = t.arange()
+    
+    if n == 0:
+        return t.zeros(0,0)
+
+    mtx = t.zeros(n-1,n+1)
+    mtx[:,0] = 1
+    mtx_flat = rearrange(mtx, 'h w -> (h w) 1')
+    one = t.arange(1,2)
+    one_mtx = rearrange(one,'(h w)-> h w', w = 1)
+    full = t.cat((mtx_flat, one_mtx), )
+    mtx_e_flat = rearrange(full, 'h 1 -> h')
+    mtx_eye = rearrange(mtx_e_flat, '(h w) -> h w', w = n)
+    
+    return mtx_eye
+    
 #%%
 
 assert_all_equal(identity_matrix(3), t.Tensor([[1, 0, 0], [0, 1, 0], [0, 0, 1]]))
 assert_all_equal(identity_matrix(0), t.zeros((0, 0)))
 
-
+#%%
 def sample_distribution(probs: t.Tensor, n: int) -> t.Tensor:
-    """Return n random samples from probs, where probs is a normalized probability distribution.
+    """Return n random samples from probs, 
+    where probs is a normalized probability distribution.
 
     probs: shape (k,) where probs[i] is the probability of event i occurring.
     n: number of random samples
@@ -247,46 +248,104 @@ def sample_distribution(probs: t.Tensor, n: int) -> t.Tensor:
     """
     assert abs(probs.sum() - 1.0) < 0.001
     assert (probs >= 0).all()
-    pass
+    k = len(probs)
+    bins = t.cumsum(probs, dim = 0)
+    random = t.rand(n)
+    bins_extended = repeat(bins, 'h -> w h', w = n)
+    random_extended = repeat(random, 'h -> h w', w = k)
+    difference = bins_extended - random_extended
+    min_probs = difference.apply_(lambda y: max(0,y))
+    ceil = min_probs.apply_(lambda y: math.ceil(y))
+    nums = t.arange(0,k)
+    nums_repeated = repeat(nums, 'h -> w h', w = n)
+    indexes = t.einsum('ij, ij -> ij', nums_repeated.float(), ceil)
+    indexes.apply_(lambda y: k if y == 0 else y)
+    result = reduce(indexes, 'h w -> h', 'min')
+    return result.int()
+    
 
+# %%
+from torchvision.transforms import Lambda
 
-n = 10000000
+n = 10
 probs = t.tensor([0.05, 0.1, 0.1, 0.2, 0.15, 0.4])
+k = len(probs)
+bins = t.cumsum(probs, dim = 0)
+random = t.rand(n)
+bins_extended = repeat(bins, 'h -> w h', w = n)
+random_extended = repeat(random, 'h -> h w', w = k)
+difference = bins_extended - random_extended
+min_probs = difference.apply_(lambda y: max(0,y))
+ceil = min_probs.apply_(lambda y: math.ceil(y))
+nums = t.arange(0,k)
+nums_repeated = repeat(nums, 'h -> w h', w = n)
+indexes = t.einsum('ij, ij -> ij', nums_repeated.float(), ceil)
+indexes.apply_(lambda y: k if y == 0 else y)
+result = reduce(indexes, 'h w -> h', 'min')
+result
+
+
+#%%
+n = 4000000
+probs = t.tensor([0.05, 0.1, 0.2, 0.15, 0.5])
 freqs = t.bincount(sample_distribution(probs, n)) / n
+freqs - probs
+#%%
 assert_all_close(freqs, probs, rtol=0.001, atol=0.001)
 
+#%%
 
+probs = t.tensor([0.05, 0.1, 0.1, 0.2, 0.15, 0.4])
+
+
+
+#%%
 def classifier_accuracy(scores: t.Tensor, true_classes: t.Tensor) -> t.Tensor:
-    """Return the fraction of inputs for which the maximum score corresponds to the true class for that input.
+    """Return the fraction of inputs for which the maximum score corresponds 
+    to the true class for that input.
 
-    scores: shape (batch, n_classes). A higher score[b, i] means that the classifier thinks class i is more likely.
+    scores: shape (batch, n_classes). A higher score[b, i] means that the
+    classifier thinks class i is more likely.
     true_classes: shape (batch, ). true_classes[b] is an integer from [0...n_classes).
 
     Use torch.argmax.
     """
     assert true_classes.max() < scores.shape[1]
-    pass
+    scores = t.tensor([[0.75, 0.5, 0.25], [0.1, 0.5, 0.4], [0.1, 0.7, 0.2]])
+    true_classes = t.tensor([0, 1, 0])
+    predicted_classes = t.argmax(scores)
+    success = true_classes == predicted_classes
+    freq = reduce(success.float(), 'h ->', 'mean')
+    return freq
 
+#%%
 
 scores = t.tensor([[0.75, 0.5, 0.25], [0.1, 0.5, 0.4], [0.1, 0.7, 0.2]])
 true_classes = t.tensor([0, 1, 0])
 expected = 2.0 / 3.0
 assert classifier_accuracy(scores, true_classes) == expected
 
-
+#%%
 def total_price_indexing(prices: t.Tensor, items: t.Tensor) -> float:
-    """Given prices for each kind of item and a tensor of items purchased, return the total price.
+    """Given prices for each kind of item and a tensor of 
+    items purchased, return the total price.
 
     prices: shape (k, ). prices[i] is the price of the ith item.
-    items: shape (n, ). A 1D tensor where each value is an item index from [0..k).
+    items: shape (n, ). A 1D tensor where each value is an item
+    index from [0..k).
 
-    Use integer array indexing. The below document describes this for NumPy but it's the same in PyTorch:
+    Use integer array indexing. The below document describes this for
+      NumPy but it's the same in PyTorch:
 
     https://numpy.org/doc/stable/user/basics.indexing.html#integer-array-indexing
     """
     assert items.max() < prices.shape[0]
     pass
 
+#%%
+
+
+#%%
 
 prices = t.tensor([0.5, 1, 1.5, 2, 2.5])
 items = t.tensor([0, 0, 1, 1, 4, 3, 2])

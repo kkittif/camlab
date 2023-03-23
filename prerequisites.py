@@ -340,10 +340,9 @@ def total_price_indexing(prices: t.Tensor, items: t.Tensor) -> float:
     https://numpy.org/doc/stable/user/basics.indexing.html#integer-array-indexing
     """
     assert items.max() < prices.shape[0]
-    pass
-
-#%%
-
+    prices = t.tensor([0.5, 1, 1.5, 2, 2.5])
+    items = t.tensor([0, 0, 1, 1, 4, 3, 2])
+    return reduce(prices[items], 'h-> ', 'sum')
 
 #%%
 
@@ -351,7 +350,7 @@ prices = t.tensor([0.5, 1, 1.5, 2, 2.5])
 items = t.tensor([0, 0, 1, 1, 4, 3, 2])
 assert total_price_indexing(prices, items) == 9.0
 
-
+#%%
 def gather_2d(matrix: t.Tensor, indexes: t.Tensor) -> t.Tensor:
     """Perform a gather operation along the second dimension.
 
@@ -360,7 +359,10 @@ def gather_2d(matrix: t.Tensor, indexes: t.Tensor) -> t.Tensor:
 
     Return: shape (m, k). out[i][j] = matrix[i][indexes[i][j]]
 
-    For this problem, the test already passes and it's your job to write at least three asserts relating the arguments and the output. This is a tricky function and worth spending some time to wrap your head around its behavior.
+    For this problem, the test already passes and it's your job to 
+    write at least three asserts relating the arguments and the output.
+    This is a tricky function and worth spending some time to wrap your 
+    head around its behavior.
 
     See: https://pytorch.org/docs/stable/generated/torch.gather.html?highlight=gather#torch.gather
     """
@@ -369,7 +371,7 @@ def gather_2d(matrix: t.Tensor, indexes: t.Tensor) -> t.Tensor:
     "TODO: YOUR CODE HERE"
     return out
 
-
+#%%
 matrix = t.arange(15).view(3, 5)
 indexes = t.tensor([[4], [3], [2]])
 expected = t.tensor([[4], [8], [12]])
@@ -378,18 +380,34 @@ indexes2 = t.tensor([[2, 4], [1, 3], [0, 2]])
 expected2 = t.tensor([[2, 4], [6, 8], [10, 12]])
 assert_all_equal(gather_2d(matrix, indexes), expected)
 
+#%%
+#My asserts:
+indexes_3 = t.tensor([[1,1,3], [0,1,2], [4,4,1]])
+expected_3 = t.tensor([[1,1,3], [5,6,7], [14,14,11]])
+assert_all_equal(expected_3, gather_2d(matrix,indexes_3))
 
+indexes_4 = t.tensor([[0],[0]])
+expected_4 = t.tensor([[0],[5]])
+assert_all_equal(expected_4, gather_2d(matrix,indexes_4))
+
+indexes_5 = t.tensor([[0,0,0],[0,0,0],[0,0,0]])
+expected_5 = t.tensor([[0,0,0],[5,5,5], [10,10,10]]) 
+assert_all_equal(expected_5, gather_2d(matrix,indexes_5))
+
+
+#%%
 def total_price_gather(prices: t.Tensor, items: t.Tensor) -> float:
     """Compute the same as total_price_indexing, but use torch.gather."""
     assert items.max() < prices.shape[0]
-    pass
+    t.gather(prices,0,items)
+    return reduce(t.gather(prices,0,items), 'h->', 'sum')
 
-
+#%%
 prices = t.tensor([0.5, 1, 1.5, 2, 2.5])
 items = t.tensor([0, 0, 1, 1, 4, 3, 2])
 assert total_price_gather(prices, items) == 9.0
 
-
+#%%
 def integer_array_indexing(matrix: t.Tensor, coords: t.Tensor) -> t.Tensor:
     """Return the values at each coordinate using integer array indexing.
 
@@ -401,9 +419,11 @@ def integer_array_indexing(matrix: t.Tensor, coords: t.Tensor) -> t.Tensor:
 
     Return: (batch, )
     """
-    pass
+    rear = rearrange(coords, 'd ... -> ... d')
+    return matrix[t.unbind(rear)]
 
 
+#%%
 mat_2d = t.arange(15).view(3, 5)
 coords_2d = t.tensor([[0, 1], [0, 4], [1, 4]])
 actual = integer_array_indexing(mat_2d, coords_2d)
@@ -412,7 +432,7 @@ mat_3d = t.arange(2 * 3 * 4).view((2, 3, 4))
 coords_3d = t.tensor([[0, 0, 0], [0, 1, 1], [0, 2, 2], [1, 0, 3], [1, 2, 0]])
 actual = integer_array_indexing(mat_3d, coords_3d)
 assert_all_equal(actual, t.tensor([0, 5, 10, 15, 20]))
-
+#%%
 
 def batched_logsumexp(matrix: t.Tensor) -> t.Tensor:
     """For each row of the matrix, compute log(sum(exp(row))) in a numerically stable way.

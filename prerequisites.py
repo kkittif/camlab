@@ -482,7 +482,7 @@ def batched_softmax(matrix: t.Tensor) -> t.Tensor:
     Return: (batch, n). For each i, out[i] should sum to 1.
     """
  
-    exp = matrix.apply_(lambda y: math.exp(y))
+    exp = t.exp(matrix) 
     denom = reduce(exp, 'h w -> h', 'sum')
     denom_rep = repeat(denom, 'h -> h w', w = matrix.shape[1])
     return exp/denom_rep
@@ -537,9 +537,11 @@ def batched_logsoftmax(matrix: t.Tensor) -> t.Tensor:
     For each row, subtract the maximum first to avoid 
     overflow if the row contains large values.
     """
-    matrix = t.arange(1, 6).view((1, 5)).float()
-    matrix_small = matrix - reduce(matrix, 'h w -> h', 'max')
-    logsoftmax = batched_softmax(matrix_small).apply_(lambda y: math.log(y))
+    row_max = reduce(matrix, 'h w -> h', 'max')
+    matrix_max = repeat(row_max, 'h -> h c', c = matrix.shape[1] )
+    matrix_small = matrix - matrix_max
+    #logsoftmax = batched_softmax(matrix_small).apply_(lambda y: 10 ** -10 if y == float("-inf") else math.log(y))
+    logsoftmax = t.log(batched_softmax(matrix_small))
     return logsoftmax
 
 #%%
@@ -566,26 +568,17 @@ def batched_cross_entropy_loss(logits: t.Tensor, true_labels: t.Tensor) -> t.Ten
     Then the loss for an example is just the negative of the log-probability that
       the model assigned to the true class. Use torch.gather to perform the indexing.
     """
-    pass
+    probs = - batched_logsoftmax(logits)
+    return t.gather(probs, dim = 1,  index = true_labels.view(-1,1)).squeeze()
 
 #%%
 logits = t.tensor([[float("-inf"), float("-inf"), 0], [1 / 3, 1 / 3, 1 / 3], [float("-inf"), 0, 0]])
-true_labels = t.tensor([2, 0, 0])
-logprob = batched_logsoftmax(logits)
-
-
-#%%
-
-
-logits = t.tensor([[float("-inf"), float("-inf"), 0], [1 / 3, 1 / 3, 1 / 3], [float("-inf"), 0, 0]])
-logits
-#%%
 true_labels = t.tensor([2, 0, 0])
 expected = t.tensor([0.0, math.log(3), float("inf")])
 actual = batched_cross_entropy_loss(logits, true_labels)
 assert_all_close(actual, expected)
 
-
+#%%
 def collect_rows(matrix: t.Tensor, row_indexes: t.Tensor) -> t.Tensor:
     """Return a 2D matrix whose rows are taken from the input matrix in order according to row_indexes.
 
@@ -595,9 +588,9 @@ def collect_rows(matrix: t.Tensor, row_indexes: t.Tensor) -> t.Tensor:
     Return: shape (k, n). out[i] is matrix[row_indexes[i]].
     """
     assert row_indexes.max() < matrix.shape[0]
-    pass
+    return t.gather(matrix, dim = 0, index = repeat(row_indexes.view(-1, 1), 'h w -> h (w k)', k = matrix.shape[1]))
 
-
+#%%
 matrix = t.arange(15).view((5, 3))
 row_indexes = t.tensor([0, 2, 1, 0])
 actual = collect_rows(matrix, row_indexes)

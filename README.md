@@ -1,4 +1,4 @@
-# camlab
+# CaMLAB
 
 Solving the pre-requisite material for the Cambridge Machine Learning for Alignment Bootcamp (MLAB).
 
